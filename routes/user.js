@@ -8,43 +8,71 @@ const user = db.user;
 
 const JWT_SECRET = "paas";
 
+// Middleware untuk otentikasi token (Digunakan hanya pada endpoint yang butuh proteksi)
 const authenticateToken = (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
+      return res.status(401).json({ message: 'Unauthorized: No token provided' });
     }
 
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
-        return res.status(401).json({ message: 'Invalid or expired token' });
+        return res.status(403).json({ message: 'Forbidden: Invalid or expired token' });
       }
       req.user = decoded;
       next();
     });
   } catch (error) {
-    return res.status(401).json({ message: 'Authentication failed' });
+    return res.status(401).json({ message: 'Authentication failed', details: error.message });
   }
 };
 
-// Mendapatkan semua user (Protected Route)
-router.get("/", authenticateToken, async (req, res) => {
+// ✅ Mendapatkan semua user (Public API, tidak butuh token)
+router.get("/", async (req, res) => {
   try {
-      const alluser = await user.findAll();
-      res.json({ result: alluser });
+    const allUsers = await user.findAll({
+      attributes: ['id_user', 'nama', 'email'] // Hindari mengirimkan password
+    });
+    res.json({ users: allUsers });
   } catch (error) {
-      res.status(500).json({ message: 'Error fetching users' });
+    res.status(500).json({ message: 'Error fetching users', details: error.message });
   }
 });
 
-// Menambahkan user baru dengan password hash
+// ✅ Mendapatkan user berdasarkan ID (Public API)
+router.get("/:id_user", async (req, res) => {
+  try {
+    const foundUser = await user.findByPk(req.params.id_user, {
+      attributes: ['id_user', 'nama', 'email']
+    });
+
+    if (!foundUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ user: foundUser });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching user", details: error.message });
+  }
+});
+
+// ✅ Menambahkan user baru dengan password hash (Public API)
 router.post("/", async (req, res) => {
   try {
     const { nama, email, password } = req.body;
 
-    // Hash password dengan bcrypt
+    if (!nama || !email || !password) {
+      return res.status(400).json({ message: "Nama, email, dan password diperlukan" });
+    }
+
+    const existingUser = await user.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await user.create({
@@ -53,28 +81,21 @@ router.post("/", async (req, res) => {
       password: hashedPassword
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { email: newUser.email, id_user: newUser.id_user },
-      JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    res.json({
-      user: newUser,
-      token
-    });
+    res.status(201).json({ message: "User registered successfully", user: newUser });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating user', details: error.message });
+    res.status(500).json({ message: "Error creating user", details: error.message });
   }
 });
 
-// Mengupdate data user
-router.patch("/:id_user", async (req, res) => {
+// ✅ Mengupdate data user (Hanya user yang bersangkutan bisa update)
+router.patch("/:id_user", authenticateToken, async (req, res) => {
   try {
+    if (req.user.id_user !== parseInt(req.params.id_user)) {
+      return res.status(403).json({ message: "Forbidden: You can only update your own data" });
+    }
+
     const updateData = { ...req.body };
 
-    // Jika password di-update, hash password baru
     if (req.body.password) {
       updateData.password = await bcrypt.hash(req.body.password, 10);
     }
@@ -84,7 +105,7 @@ router.patch("/:id_user", async (req, res) => {
     });
 
     if (result[0] === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "User not found or no changes made" });
     }
 
     res.json({ message: "User updated successfully" });
@@ -93,9 +114,13 @@ router.patch("/:id_user", async (req, res) => {
   }
 });
 
-// Menghapus user
-router.delete("/:id_user", async (req, res) => {
+// ✅ Menghapus user (Hanya user yang bersangkutan bisa menghapus akun sendiri)
+router.delete("/:id_user", authenticateToken, async (req, res) => {
   try {
+    if (req.user.id_user !== parseInt(req.params.id_user)) {
+      return res.status(403).json({ message: "Forbidden: You can only delete your own account" });
+    }
+
     const result = await user.destroy({ where: { id_user: req.params.id_user } });
 
     if (!result) {
@@ -108,26 +133,27 @@ router.delete("/:id_user", async (req, res) => {
   }
 });
 
-// Login dengan password hash
+// ✅ Login dengan password hash (Public API)
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Cari user berdasarkan email
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
     const foundUser = await user.findOne({ where: { email }, raw: true });
 
     if (!foundUser) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Bandingkan password dengan hash di database
     const passwordMatch = await bcrypt.compare(password, foundUser.password);
 
     if (!passwordMatch) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Generate token JWT
     const token = jwt.sign(
       { id_user: foundUser.id_user, email: foundUser.email, nama: foundUser.nama },
       JWT_SECRET,
