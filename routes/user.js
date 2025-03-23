@@ -1,34 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 
 const db = require("../config/db.js");
 const user = db.user;
-
-const JWT_SECRET = "paas";
-
-// Middleware untuk otentikasi token (Digunakan hanya pada endpoint yang butuh proteksi)
-const authenticateToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthorized: No token provided' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-      if (err) {
-        return res.status(403).json({ message: 'Forbidden: Invalid or expired token' });
-      }
-      req.user = decoded;
-      next();
-    });
-  } catch (error) {
-    return res.status(401).json({ message: 'Authentication failed', details: error.message });
-  }
-};
 
 // ✅ Mendapatkan semua user (Public API, tidak butuh token)
 router.get("/", async (req, res) => {
@@ -87,13 +62,9 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ Mengupdate data user (Hanya user yang bersangkutan bisa update)
-router.patch("/:id_user", authenticateToken, async (req, res) => {
+// ✅ Mengupdate data user
+router.patch("/:id_user", async (req, res) => {
   try {
-    if (req.user.id_user !== parseInt(req.params.id_user)) {
-      return res.status(403).json({ message: "Forbidden: You can only update your own data" });
-    }
-
     const updateData = { ...req.body };
 
     if (req.body.password) {
@@ -114,13 +85,9 @@ router.patch("/:id_user", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Menghapus user (Hanya user yang bersangkutan bisa menghapus akun sendiri)
-router.delete("/:id_user", authenticateToken, async (req, res) => {
+// ✅ Menghapus user
+router.delete("/:id_user", async (req, res) => {
   try {
-    if (req.user.id_user !== parseInt(req.params.id_user)) {
-      return res.status(403).json({ message: "Forbidden: You can only delete your own account" });
-    }
-
     const result = await user.destroy({ where: { id_user: req.params.id_user } });
 
     if (!result) {
@@ -154,20 +121,13 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = jwt.sign(
-      { id_user: foundUser.id_user, email: foundUser.email, nama: foundUser.nama },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
     res.json({
       message: "Login successful",
       user: {
         id: foundUser.id_user,
         email: foundUser.email,
         nama: foundUser.nama
-      },
-      token
+      }
     });
   } catch (error) {
     res.status(500).json({ message: "Server error during login", details: error.message });
