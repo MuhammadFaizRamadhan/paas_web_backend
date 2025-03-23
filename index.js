@@ -38,6 +38,9 @@ const userroute = require("./routes/user.js")
 
 app.use("/user",userroute)
 
+const todoroute = require("./routes/todo.js")
+
+app.use("/todo",todoroute)
 app.listen(port, () => {
     console.log(`app listening on port ${port}`)
 })

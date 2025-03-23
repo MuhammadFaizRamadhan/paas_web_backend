@@ -11,6 +11,7 @@ db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
 db.user = require("../models/user_model.js")(db.sequelize, db.Sequelize)
+db.todo = require("../models/todo_model.js")(db.sequelize, db.Sequelize)
 
 // Initialize associations
 Object.keys(db).forEach((modelName) => {
