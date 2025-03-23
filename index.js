@@ -1,39 +1,36 @@
-const express = require('express')
-const path = require('path');
-const app = express()
+const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 
-const port = 8080
+const app = express();
+const port = process.env.PORT || 8080; // Gunakan PORT dari Railway
+
 app.use(cors());
-
-app.get('/', (req, res) => {
-    res.send('You Can Only Access this file by user')
-})
-
-// Body parser middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Debug middleware to log requests
+// Debug middleware untuk log request
 app.use((req, res, next) => {
     console.log('Request received:', {
-      method: req.method,
-      path: req.path,
-      body: req.body,
-      headers: req.headers
+        method: req.method,
+        path: req.path,
+        body: req.body,
+        headers: req.headers
     });
     next();
-  });
+});
 
-// Importing all the routes
-const userroute = require("./routes/user.js")
+// Routes
+const userroute = require("./routes/user.js");
+app.use("/user", userroute);
 
-app.use("/user",userroute)
+const todoroute = require("./routes/todo.js");
+app.use("/todo", todoroute);
 
-const todoroute = require("./routes/todo.js")
+// Default route
+app.get('/', (req, res) => {
+    res.send('You Can Only Access this file by user');
+});
 
-app.use("/todo",todoroute)
 app.listen(port, () => {
-    console.log(`app listening on port ${port}`)
-})
+    console.log(`Server running on port ${port}`);
+});
