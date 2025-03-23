@@ -5,14 +5,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 
 const port = 8080
-app.use(cors({
-  origin: ['http://localhost:3000', 'https://paasweb-production.up.railway.app'], // or your frontend URL
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-
+app.use(cors());
 
 app.get('/', (req, res) => {
     res.send('You Can Only Access this file by user')
